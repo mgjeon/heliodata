@@ -1,3 +1,3 @@
 # Heliosphere Data (HelioData)
 
-An open-source tool to download heliosphere-related data.
+Heliosphere Data (HelioData) is an open-source tool to download data related to the heliosphere.
