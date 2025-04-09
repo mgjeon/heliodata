@@ -1,32 +1,12 @@
-[build-system]
-requires = ["setuptools >= 64"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "heliodata"
-version = "0.0.1"
+version = "0.1.0"
+description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.10"
-authors = [{name = "Mingyu Jeon"}]
 dependencies = [
     "astropy[all]>=6.1.7",
     "loguru>=0.7.3",
+    "sunpy-soar>=1.11.1",
     "sunpy[all]>=6.0.5",
 ]
-
-[project.urls]
-Homepage = "https://github.com/mgjeon/heliodata"
-Repository = "https://github.com/mgjeon/heliodata"
-Issues = "https://github.com/mgjeon/heliodata/issues"
-
-[project.optional-dependencies]
-dev = ["ruff"]
-
-[tool.setuptools]
-packages = ["heliodata"]
-
-[tool.ruff]
-line-length = 79
-
-[tool.ruff.lint]
-extend-select = ["I"]
