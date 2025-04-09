@@ -71,7 +71,7 @@ if __name__ == '__main__':
                     tr,
                     a.jsoc.Series('aia.lev1_euv_12s'),
                     a.jsoc.Segment('image'),
-                    a.jsoc.Notify('mgjeon@khu.ac.kr'),
+                    a.jsoc.Notify(args.email),
                     a.Wavelength(int(wav)*u.AA),
                     a.Sample(int(args.cadence)*u.hour),
                 )
