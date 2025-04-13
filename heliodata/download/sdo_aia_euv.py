@@ -60,7 +60,12 @@ if __name__ == '__main__':
         for wav in wavelengths:
             logger.info(wav)
 
-            n_found_files = info[str(tr)][wav]
+            try:
+                n_found_files = info[str(tr)][wav]
+            except KeyError:
+                info[str(tr)] = {}
+                info[str(tr)][wav] = None
+                n_found_files = None
 
             res_path = dataroot/wav/str(tr.start.datetime.year)
             res_path.mkdir(exist_ok=True, parents=True)
