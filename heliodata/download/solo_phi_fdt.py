@@ -10,12 +10,12 @@ import sunpy_soar
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Download SolO/EUI/FSI data from SOAR')
+    parser = argparse.ArgumentParser(description='Download SolO/PHI/FDT data from SOAR')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="174,304")
+    parser.add_argument('--descriptor', type=str, help='descriptor to download.', required=False, default="blos,icnt")
 
-    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2021)
+    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2022)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
@@ -31,8 +31,8 @@ if __name__ == '__main__':
     logger.info(vars(args))
     logger.info('-'*20)
 
-    wavelengths = [wl for wl in args.wavelengths.split(',')]
-    [(dataroot/str(args.level)/wav).mkdir(exist_ok=True, parents=True) for wav in wavelengths]
+    descriptor = [ds for ds in args.descriptor.split(',')]
+    [(dataroot/str(args.level)/ds).mkdir(exist_ok=True, parents=True) for ds in descriptor]
 
     start_year = args.start_year
     end_year = args.end_year
@@ -50,36 +50,36 @@ if __name__ == '__main__':
         info = {}
         for tr in times:
             info[str(tr)] = {}
-            for wav in wavelengths:
-                info[str(tr)][wav] = None
+            for ds in descriptor:
+                info[str(tr)][ds] = None
 
     w2p = {
-        '174': 'eui-fsi174-image',
-        '304': 'eui-fsi304-image',
+        'blos': 'phi-fdt-blos',
+        'icnt': 'phi-fdt-icnt',
     }
 
     for tr in times:
         logger.info(tr)
-        for wav in wavelengths:
-            logger.info(wav)
+        for ds in descriptor:
+            logger.info(ds)
 
             try:
-                n_found_files = info[str(tr)][wav]
+                n_found_files = info[str(tr)][ds]
             except KeyError:
                 info[str(tr)] = {}
-                info[str(tr)][wav] = None
+                info[str(tr)][ds] = None
                 n_found_files = None
 
-            res_path = dataroot/str(args.level)/wav/str(tr.start.datetime.year)
+            res_path = dataroot/str(args.level)/ds/str(tr.start.datetime.year)
             res_path.mkdir(exist_ok=True, parents=True)
             n_exist_files = len(list((res_path).glob('*.fits')))
 
             if (n_found_files is None) or (n_found_files != n_exist_files):
                 search = Fido.search(
                     tr,
-                    a.Instrument('EUI'),
+                    a.Instrument('PHI'),
                     a.Level(args.level),
-                    a.soar.Product(w2p[wav]),
+                    a.soar.Product(w2p[ds]),
                 )
                 if len(search) == 0:
                     n_found_files = 0
@@ -100,7 +100,7 @@ if __name__ == '__main__':
                             indices.append(idx)
                     search = search['soar'][indices]
                     n_found_files = len(search)
-                info[str(tr)][wav] = n_found_files
+                info[str(tr)][ds] = n_found_files
             else:
                 search = None
 

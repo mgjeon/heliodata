@@ -20,17 +20,14 @@ if __name__ == '__main__':
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2011)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
+    parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
 
     args = parser.parse_args()
     
     dataroot = Path(args.ds_path)
     log_file = dataroot / 'info.log'
     logger.add(log_file)
-    logger.info(args.ds_path)
-    logger.info(args.wavelengths)
-    logger.info(args.start_year)
-    logger.info(args.end_year)
-    logger.info(args.cadence)
+    logger.info(vars(args))
     logger.info('-'*20)
 
     wavelengths = [wl for wl in args.wavelengths.split(',')]
@@ -58,7 +55,7 @@ if __name__ == '__main__':
     s2p = {'STEREO_A': 'a', 'STEREO_B': 'b'}
 
     info_path = dataroot / 'info.json'
-    if info_path.exists():
+    if info_path.exists() and not args.ignore_info:
         with open(info_path, 'r') as f:
             info = json.load(f)
     else:
