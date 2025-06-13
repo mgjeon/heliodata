@@ -13,15 +13,15 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download SDO/HMI magnetogram from JSOC')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--series', type=str, help='series to download.', required=False, default="M_720s")
-
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2011)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
 
     parser.add_argument('--email', type=str, help='email address for JSOC.', required=True)
-
+    parser.add_argument('--series', type=str, help='series to download.', required=False, default='M_720s')
+    parser.add_argument('--segment', choices=['magnetogram', 'continuum'], required=False, default='magnetogram')
+    
     args = parser.parse_args()
 
     dataroot = Path(args.ds_path)
@@ -71,7 +71,7 @@ if __name__ == '__main__':
                 search = Fido.search(
                     tr,
                     a.jsoc.Series(f'hmi.{args.series}'),
-                    a.jsoc.Segment('magnetogram'),
+                    a.jsoc.Segment(args.segment),
                     a.jsoc.Notify(args.email),
                     a.Sample(int(args.cadence)*u.hour),
                 )

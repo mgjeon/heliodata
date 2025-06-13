@@ -13,14 +13,13 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download SolO/EUI/FSI data from SOAR')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="174,304")
-
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2021)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
-    parser.add_argument('--margin', type=int, help='time margin in hours', required=False, default=1)
 
+    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="174,304")
+    parser.add_argument('--margin', type=int, help='time margin in hours', required=False, default=1)
     parser.add_argument('--level', type=int, help='data level', required=False, default=2)
 
     args = parser.parse_args()

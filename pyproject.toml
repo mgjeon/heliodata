@@ -10,3 +10,7 @@ dependencies = [
     "sunpy-soar>=1.11.1",
     "sunpy[all]>=6.0.5",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
