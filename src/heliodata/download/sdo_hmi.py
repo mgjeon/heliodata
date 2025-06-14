@@ -11,7 +11,7 @@ from heliodata.download.util import get_times, get_respath
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Download SDO/HMI magnetogram from JSOC')
+    parser = argparse.ArgumentParser(description='Download SDO/HMI data from JSOC')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2010)
