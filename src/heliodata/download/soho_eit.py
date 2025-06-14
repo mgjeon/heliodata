@@ -11,7 +11,7 @@ from heliodata.download.util import get_times, get_respath
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Download SDO/AIA EUV data from JSOC')
+    parser = argparse.ArgumentParser(description='Download SOHO/EIT from SDAC')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2010)
@@ -21,11 +21,8 @@ if __name__ == '__main__':
     parser.add_argument('--interval', choices=['year', 'month'], default='year',
                         help='interval for the time range, either year or month.', required=False)
 
-    parser.add_argument('--email', type=str, help='email address for JSOC.', required=True)
-    parser.add_argument('--series', choices=['euv_12s', 'uv_24s', 'vis_1h'], required=False, default='euv_12s')
-    parser.add_argument('--segment', choices=['image', 'spike'], required=False, default='image')
-    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default='094,131,171,193,211,304,335')
-
+    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="171,195,284,304")
+    
     args = parser.parse_args()
 
     dataroot = Path(args.ds_path)
@@ -68,16 +65,16 @@ if __name__ == '__main__':
             if (n_found_files is None) or (n_found_files != n_exist_files):
                 search = Fido.search(
                     tr,
-                    a.jsoc.Series(f'aia.lev1_{args.series}'),
-                    a.jsoc.Segment(args.segment),
-                    a.jsoc.Notify(args.email),
+                    a.Instrument('EIT'),
+                    a.Provider('SDAC'),
+                    a.Level(0),
                     a.Wavelength(int(wav)*u.AA),
                     a.Sample(int(args.cadence)*u.hour),
                 )
                 if len(search) == 0:
                     n_found_files = 0
-                elif len(search['jsoc']) > 0:
-                    n_found_files = len(search['jsoc'])
+                elif len(search['vso']) > 0:
+                    n_found_files = len(search['vso'])
                 info[str(tr)][wav] = n_found_files
             else:
                 search = None

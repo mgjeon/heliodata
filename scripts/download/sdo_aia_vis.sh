@@ -1,4 +1,4 @@
-ds_path="F:/dataset/sdo_aia/vis"
+ds_path="F:/dataset/sdo/aia/vis"
 email="mgjeon@khu.ac.kr"
 series="vis_1h"
 wavelengths="4500"

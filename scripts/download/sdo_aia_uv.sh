@@ -1,4 +1,4 @@
-ds_path="F:/dataset/sdo_aia/uv"
+ds_path="F:/dataset/sdo/aia/uv"
 email="mgjeon@khu.ac.kr"
 series="uv_24s"
 wavelengths="1600,1700"

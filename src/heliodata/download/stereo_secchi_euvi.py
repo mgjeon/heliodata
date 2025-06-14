@@ -1,13 +1,14 @@
 import json
 import argparse
 from pathlib import Path
-from datetime import datetime
-
-from loguru import logger
 
 import astropy.units as u
 from astropy.time import Time
+import sunpy_soar
 from sunpy.net import Fido, attrs as a
+from loguru import logger
+
+from heliodata.download.util import get_times, get_respath
 
 
 if __name__ == '__main__':
@@ -15,18 +16,19 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download STEREO/SECCHI/EUVI data from SSC')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2011)
+    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2010)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
+    parser.add_argument('--interval', choices=['year', 'month'], default='month',
+                        help='interval for the time range, either year or month.', required=False)
 
     parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="171,195,284,304")
 
     args = parser.parse_args()
     
     dataroot = Path(args.ds_path)
-    log_file = dataroot / 'info.log'
-    logger.add(log_file)
+    logger.add(dataroot / 'info.log')
     logger.info(vars(args))
     logger.info('-'*20)
 
@@ -34,22 +36,7 @@ if __name__ == '__main__':
     [(dataroot/'a'/wav).mkdir(exist_ok=True, parents=True) for wav in wavelengths]
     [(dataroot/'b'/wav).mkdir(exist_ok=True, parents=True) for wav in wavelengths]
 
-    start_year = args.start_year
-    end_year = args.end_year
-    times = []
-    year = start_year
-    while year <= end_year:
-        for month in range(1, 13):
-            if month < 12:
-                dt = datetime(year, month, 1)
-                dtn = datetime(year, month+1, 1)
-                tr = a.Time(dt.strftime('%Y-%m-%dT%H:%M:%S'), dtn.strftime('%Y-%m-%dT%H:%M:%S'))
-            elif month == 12:
-                dt = datetime(year, month, 1)
-                dtn = datetime(year+1, 1, 1)
-                tr = a.Time(dt.strftime('%Y-%m-%dT%H:%M:%S'), dtn.strftime('%Y-%m-%dT%H:%M:%S'))
-            times.append(tr)
-        year = year + 1
+    times = get_times(args.start_year, args.end_year, args.interval)
 
     stereo = ['STEREO_A', 'STEREO_B']
     s2p = {'STEREO_A': 'a', 'STEREO_B': 'b'}
@@ -68,6 +55,8 @@ if __name__ == '__main__':
                     info[str(tr)][s][wav] = None
 
     for tr in times:
+        if str(tr) not in info:
+            info[str(tr)] = {}
         logger.info(tr)
         for s in stereo:
             if s == 'STEREO_B' and tr.start > Time('2014-10-01'):
@@ -84,8 +73,7 @@ if __name__ == '__main__':
                     info[str(tr)][s][wav] = None
                     n_found_files = None
 
-                res_path = dataroot/s2p[s]/wav/str(tr.start.datetime.year)/str(tr.start.datetime.month)
-                res_path.mkdir(exist_ok=True, parents=True)
+                res_path = get_respath(dataroot/s2p[s]/wav, tr, args.interval)
                 n_exist_files = len(list((res_path).glob('*.fts')))
 
                 if (n_found_files is None) or (n_found_files != n_exist_files):

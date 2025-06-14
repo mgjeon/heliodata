@@ -3,10 +3,13 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+import astropy.units as u
+import sunpy_soar
+from sunpy.net import Fido, attrs as a
 from loguru import logger
 
-from sunpy.net import Fido, attrs as a
-import sunpy_soar
+from heliodata.download.util import get_times, get_respath
+
 
 if __name__ == '__main__':
 
@@ -17,29 +20,24 @@ if __name__ == '__main__':
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
+    parser.add_argument('--interval', choices=['year', 'month'], default='year',
+                        help='interval for the time range, either year or month.', required=False)
 
-    parser.add_argument('--product', type=str, help='product to download.', required=False, default="blos")
+    parser.add_argument('--product', type=str, help='product to download.', required=False, default="phi-fdt-blos")
     parser.add_argument('--margin', type=int, help='time margin in hours', required=False, default=1)
     parser.add_argument('--level', type=int, help='data level', required=False, default=2)
 
     args = parser.parse_args()
     
     dataroot = Path(args.ds_path)
-    log_file = dataroot / 'info.log'
-    logger.add(log_file)
+    logger.add(dataroot / 'info.log')
     logger.info(vars(args))
     logger.info('-'*20)
 
-    product = [ds for ds in args.product.split(',')]
-    [(dataroot/str(args.level)/ds).mkdir(exist_ok=True, parents=True) for ds in product]
+    products = [ds for ds in args.product.split(',')]
+    [(dataroot/str(args.level)/ds).mkdir(exist_ok=True, parents=True) for ds in products]
 
-    start_year = args.start_year
-    end_year = args.end_year
-    times = []
-    year = start_year
-    while year <= end_year:
-        times.append(a.Time(f'{year}-01-01T00:00:00', f'{year}-12-31T23:59:59'))
-        year = year + 1
+    times = get_times(args.start_year, args.end_year, args.interval)
 
     info_path = dataroot / 'info.json'
     if info_path.exists() and not args.ignore_info:
@@ -49,16 +47,14 @@ if __name__ == '__main__':
         info = {}
         for tr in times:
             info[str(tr)] = {}
-            for ds in product:
+            for ds in products:
                 info[str(tr)][ds] = None
 
-    w2p = {
-        'blos': 'phi-fdt-blos',
-    }
-
     for tr in times:
+        if str(tr) not in info:
+            info[str(tr)] = {}
         logger.info(tr)
-        for ds in product:
+        for ds in products:
             logger.info(ds)
 
             try:
@@ -68,8 +64,7 @@ if __name__ == '__main__':
                 info[str(tr)][ds] = None
                 n_found_files = None
 
-            res_path = dataroot/str(args.level)/ds/str(tr.start.datetime.year)
-            res_path.mkdir(exist_ok=True, parents=True)
+            res_path = get_respath(dataroot/str(args.level)/ds, tr, args.interval)
             n_exist_files = len(list((res_path).glob('*.fits')))
 
             if (n_found_files is None) or (n_found_files != n_exist_files):
@@ -77,7 +72,7 @@ if __name__ == '__main__':
                     tr,
                     a.Instrument('PHI'),
                     a.Level(args.level),
-                    a.soar.Product(w2p[ds]),
+                    a.soar.Product(args.product),
                 )
                 if len(search) == 0:
                     n_found_files = 0

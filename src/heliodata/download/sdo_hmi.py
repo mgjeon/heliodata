@@ -2,10 +2,11 @@ import json
 import argparse
 from pathlib import Path
 
-from loguru import logger
-
 import astropy.units as u
 from sunpy.net import Fido, attrs as a
+from loguru import logger
+
+from heliodata.download.util import get_times, get_respath
 
 
 if __name__ == '__main__':
@@ -13,10 +14,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Download SDO/HMI magnetogram from JSOC')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2011)
+    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2010)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
+    parser.add_argument('--interval', choices=['year', 'month'], default='year',
+                        help='interval for the time range, either year or month.', required=False)
 
     parser.add_argument('--email', type=str, help='email address for JSOC.', required=True)
     parser.add_argument('--series', type=str, help='series to download.', required=False, default='M_720s')
@@ -32,13 +35,7 @@ if __name__ == '__main__':
     series = [s for s in args.series.split(',')]
     [(dataroot/s).mkdir(exist_ok=True, parents=True) for s in series]
 
-    start_year = args.start_year
-    end_year = args.end_year
-    times = []
-    year = start_year
-    while year <= end_year:
-        times.append(a.Time(f'{year}-01-01T00:00:00', f'{year}-12-31T23:59:59'))
-        year = year + 1
+    times = get_times(args.start_year, args.end_year, args.interval)
 
     info_path = dataroot / 'info.json'
     if info_path.exists() and not args.ignore_info:
@@ -52,6 +49,8 @@ if __name__ == '__main__':
                 info[str(tr)][s] = None
 
     for tr in times:
+        if str(tr) not in info:
+            info[str(tr)] = {}
         logger.info(tr)
         for s in series:
             logger.info(s)
@@ -63,8 +62,7 @@ if __name__ == '__main__':
                 info[str(tr)][s] = None
                 n_found_files = None
 
-            res_path = dataroot/s/str(tr.start.datetime.year)
-            res_path.mkdir(exist_ok=True, parents=True)
+            res_path = get_respath(dataroot/s, tr, args.interval)
             n_exist_files = len(list((res_path).glob('*.fits')))
 
             if (n_found_files is None) or (n_found_files != n_exist_files):

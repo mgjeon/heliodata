@@ -3,43 +3,41 @@ import argparse
 from pathlib import Path
 
 import pandas as pd
+import astropy.units as u
+import sunpy_soar
+from sunpy.net import Fido, attrs as a
 from loguru import logger
 
-from sunpy.net import Fido, attrs as a
-import sunpy_soar
+from heliodata.download.util import get_times, get_respath
+
 
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='Download SolO/EUI/FSI data from SOAR')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
-    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2021)
+    parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2020)
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
+    parser.add_argument('--interval', choices=['year', 'month'], default='year',
+                        help='interval for the time range, either year or month.', required=False)
 
-    parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="174,304")
+    parser.add_argument('--product', type=str, help='product to download.', required=False, default="eui-fsi174-image,eui-fsi304-image")
     parser.add_argument('--margin', type=int, help='time margin in hours', required=False, default=1)
     parser.add_argument('--level', type=int, help='data level', required=False, default=2)
 
     args = parser.parse_args()
     
     dataroot = Path(args.ds_path)
-    log_file = dataroot / 'info.log'
-    logger.add(log_file)
+    logger.add(dataroot / 'info.log')
     logger.info(vars(args))
     logger.info('-'*20)
 
-    wavelengths = [wl for wl in args.wavelengths.split(',')]
-    [(dataroot/str(args.level)/wav).mkdir(exist_ok=True, parents=True) for wav in wavelengths]
+    products = [ds for ds in args.product.split(',')]
+    [(dataroot/str(args.level)/ds).mkdir(exist_ok=True, parents=True) for ds in products]
 
-    start_year = args.start_year
-    end_year = args.end_year
-    times = []
-    year = start_year
-    while year <= end_year:
-        times.append(a.Time(f'{year}-01-01T00:00:00', f'{year}-12-31T23:59:59'))
-        year = year + 1
+    times = get_times(args.start_year, args.end_year, args.interval)
 
     info_path = dataroot / 'info.json'
     if info_path.exists() and not args.ignore_info:
@@ -49,28 +47,24 @@ if __name__ == '__main__':
         info = {}
         for tr in times:
             info[str(tr)] = {}
-            for wav in wavelengths:
-                info[str(tr)][wav] = None
-
-    w2p = {
-        '174': 'eui-fsi174-image',
-        '304': 'eui-fsi304-image',
-    }
+            for ds in products:
+                info[str(tr)][ds] = None
 
     for tr in times:
+        if str(tr) not in info:
+            info[str(tr)] = {}
         logger.info(tr)
-        for wav in wavelengths:
-            logger.info(wav)
+        for ds in products:
+            logger.info(ds)
 
             try:
-                n_found_files = info[str(tr)][wav]
+                n_found_files = info[str(tr)][ds]
             except KeyError:
                 info[str(tr)] = {}
-                info[str(tr)][wav] = None
+                info[str(tr)][ds] = None
                 n_found_files = None
 
-            res_path = dataroot/str(args.level)/wav/str(tr.start.datetime.year)
-            res_path.mkdir(exist_ok=True, parents=True)
+            res_path = get_respath(dataroot/str(args.level)/ds, tr, args.interval)
             n_exist_files = len(list((res_path).glob('*.fits')))
 
             if (n_found_files is None) or (n_found_files != n_exist_files):
@@ -78,7 +72,7 @@ if __name__ == '__main__':
                     tr,
                     a.Instrument('EUI'),
                     a.Level(args.level),
-                    a.soar.Product(w2p[wav]),
+                    a.soar.Product(args.product),
                 )
                 if len(search) == 0:
                     n_found_files = 0
@@ -99,7 +93,7 @@ if __name__ == '__main__':
                             indices.append(idx)
                     search = search['soar'][indices]
                     n_found_files = len(search)
-                info[str(tr)][wav] = n_found_files
+                info[str(tr)][ds] = n_found_files
             else:
                 search = None
 
