@@ -72,7 +72,7 @@ if __name__ == '__main__':
                     tr,
                     a.Instrument('PHI'),
                     a.Level(args.level),
-                    a.soar.Product(args.product),
+                    a.soar.Product(ds),
                 )
                 if len(search) == 0:
                     n_found_files = 0

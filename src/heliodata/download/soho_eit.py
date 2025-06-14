@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser.add_argument('--end_year', type=int, help='end year in format YYYY.', required=False, default=2024)
     parser.add_argument('--cadence', type=int, help='sample cadence in hours', required=False, default=24)
     parser.add_argument('--ignore_info', action='store_true', help='ignore info.json file', required=False, default=False)
-    parser.add_argument('--interval', choices=['year', 'month'], default='year',
+    parser.add_argument('--interval', choices=['year', 'month'], default='month',
                         help='interval for the time range, either year or month.', required=False)
 
     parser.add_argument('--wavelengths', type=str, help='wavelengths to download.', required=False, default="171,195,284,304")
@@ -67,7 +67,6 @@ if __name__ == '__main__':
                     tr,
                     a.Instrument('EIT'),
                     a.Provider('SDAC'),
-                    a.Level(0),
                     a.Wavelength(int(wav)*u.AA),
                     a.Sample(int(args.cadence)*u.hour),
                 )
@@ -91,5 +90,10 @@ if __name__ == '__main__':
 
             if search is not None:
                 Fido.fetch(search, path=res_path)
+
+                for file in res_path.glob('*'):
+                    if not file.name.endswith('.fits'):
+                        new_file = file.parent / (file.name.replace('.', '_') + '.fits')
+                        file.rename(new_file)
 
     logger.info(f'Finished {tr}')

@@ -13,7 +13,7 @@ from heliodata.download.util import get_times, get_respath
 
 if __name__ == '__main__':
 
-    parser = argparse.ArgumentParser(description='Download SolO/EUI/FSI data from SOAR')
+    parser = argparse.ArgumentParser(description='Download SolO/EUI data from SOAR')
 
     parser.add_argument('--ds_path', type=str, help='path to the download directory.', required=True)
     parser.add_argument('--start_year', type=int, help='start year in format YYYY.', required=False, default=2020)
@@ -72,7 +72,7 @@ if __name__ == '__main__':
                     tr,
                     a.Instrument('EUI'),
                     a.Level(args.level),
-                    a.soar.Product(args.product),
+                    a.soar.Product(ds),
                 )
                 if len(search) == 0:
                     n_found_files = 0
