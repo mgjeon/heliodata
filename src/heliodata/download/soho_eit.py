@@ -94,6 +94,11 @@ if __name__ == '__main__':
                 for file in res_path.glob('*'):
                     if not file.name.endswith('.fits'):
                         new_file = file.parent / (file.name.replace('.', '_') + '.fits')
-                        file.rename(new_file)
+                        try:
+                            file.rename(new_file)
+                        except FileExistsError:
+                            new_file.unlink()
+                            file.rename(new_file)
+                        open(file, 'w').close() # to skip the file in future runs
 
     logger.info(f'Finished {tr}')
