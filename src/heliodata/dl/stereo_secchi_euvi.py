@@ -8,7 +8,7 @@ from datetime import datetime
 import pandas as pd
 from astropy.io import fits
 
-from sswdata.download.util import download_url, get_bs
+from heliodata.dl.util import download_url, get_bs, get_timedelta, get_t_start_from_log
 
 
 class STEREOEUVIDownloader:
@@ -167,7 +167,6 @@ class STEREOEUVIDownloader:
     
 
 if __name__ == '__main__':
-    from sswdata.download.util import get_timedelta, get_t_start_from_log
     import warnings; warnings.filterwarnings("ignore")
 
     parser = argparse.ArgumentParser(description='Download STEREO/SECCHI EUVI data from SSC')

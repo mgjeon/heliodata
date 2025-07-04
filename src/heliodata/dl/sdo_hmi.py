@@ -11,7 +11,7 @@ from astropy.io import fits
 from sunpy.io._fits import header_to_fits
 from sunpy.util import MetaDict
 
-from sswdata.download.util import download_url
+from heliodata.dl.util import download_url, get_timedelta, get_t_start_from_log
 
 
 class SDOHMIDownloader:
@@ -154,7 +154,6 @@ class SDOHMIDownloader:
 
 
 if __name__ == '__main__':
-    from sswdata.download.util import get_timedelta, get_t_start_from_log
     import warnings; warnings.filterwarnings("ignore")
 
     parser = argparse.ArgumentParser(description='Download SDO/HMI Continuum & Magnetogram data from JSOC')

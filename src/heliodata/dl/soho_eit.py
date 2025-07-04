@@ -8,7 +8,7 @@ from datetime import datetime
 import pandas as pd
 from astropy.io import fits
 
-from sswdata.download.util import download_url, get_bs
+from heliodata.dl.util import download_url, get_bs, get_timedelta
 
 class SOHOEITDownloader:
     """
@@ -194,8 +194,6 @@ class SOHOEITDownloader:
     
 
 if __name__ == '__main__':
-    from itipy.download.util import get_timedelta
-
     parser = argparse.ArgumentParser(description='Download SOHO/EIT data from SDAC with quality check')
     parser.add_argument('--ds_path', type=str, help='path to the download directory.')
     parser.add_argument('--n_workers', type=str, help='number of parallel threads.', required=False, default=4)
