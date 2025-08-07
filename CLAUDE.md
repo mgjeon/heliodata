@@ -34,18 +34,77 @@ Each mission has its own download module following a consistent pattern:
 pip install -e .
 
 # Install with development dependencies
-pip install -e ".[dev]"
+pip install -e . --dependency-groups dev
+
+# Install with test dependencies
+pip install -e . --dependency-groups test
+
+# Install with documentation dependencies  
+pip install -e . --dependency-groups docs
 ```
 
-### Running Download Scripts
-Each download module can be run as a Python module:
+### Code Quality Tools
+```bash
+# Format code with black
+black src/
+
+# Lint with ruff
+ruff check src/
+
+# Type checking with mypy
+mypy src/
+
+# Run tests with pytest
+pytest
+
+# Run tests with coverage
+pytest --cov=heliodata --cov-report=html
+
+# Install pre-commit hooks
+pre-commit install
+```
+
+### Using the CLI
+The modern way to use HelioData is through the CLI:
+```bash
+# Create default configuration
+heliodata config init
+
+# Show current configuration
+heliodata config show
+
+# Download SDO/AIA data
+heliodata download sdo-aia --ds-path /path/to/data --email your@email.com
+
+# Download SOHO/EIT data  
+heliodata download soho-eit --ds-path /path/to/data
+```
+
+### Configuration Management
+Use `heliodata.toml` for centralized configuration:
+```toml
+[download]
+ds_path = "/path/to/data"
+email = "your@email.com"
+start_year = 2020
+end_year = 2024
+log_level = "INFO"
+validate_files = true
+
+[sdo_aia]
+series = "euv_12s"
+wavelengths = ["094", "131", "171", "193", "211", "304", "335"]
+```
+
+### Running Download Scripts (Legacy)
+Each download module can still be run as a Python module:
 ```bash
 python -m heliodata.download.sdo_aia --ds_path /path/to/data --email your@email.com --series euv_12s --wavelengths "094,131,171,193,211,304,335"
 python -m heliodata.download.soho_eit --ds_path /path/to/data --wavelengths "171,195,284,304"
 python -m heliodata.download.solo_eui --ds_path /path/to/data --product "eui-fsi174-image,eui-fsi304-image"
 ```
 
-### Using Convenience Scripts
+### Using Convenience Scripts  
 The `scripts/download/` directory contains pre-configured shell scripts:
 ```bash
 ./scripts/download/sdo_aia_euv.sh
@@ -60,6 +119,42 @@ The `scripts/download/` directory contains pre-configured shell scripts:
 - **Astropy**: Astronomical data structures and units
 - **Loguru**: Logging framework
 - **Pandas**: Used in Solar Orbiter data processing for time matching
+
+## Example Scripts
+
+The `examples/` directory contains comprehensive example scripts:
+
+### Basic Usage (`examples/download_example.py`)
+Demonstrates core features:
+- Type-safe configuration management
+- Time range generation with validation
+- Path management utilities
+- File validation and checksum calculation
+- Custom exception handling
+- Advanced logging features
+
+```bash
+cd examples/
+python download_example.py
+```
+
+### Advanced Usage (`examples/advanced_usage.py`)
+Shows production patterns:
+- Batch processing multiple missions
+- Progress tracking and resumable operations
+- Custom configuration classes
+- File validation workflows
+- Integration with existing data pipelines
+
+```bash
+cd examples/
+python advanced_usage.py
+```
+
+### Example Configuration Files
+Both scripts generate sample configurations you can customize:
+- `example_config.toml` - Basic configuration
+- `advanced_data/advanced_config.toml` - Multi-mission batch setup
 
 ## Data Organization
 

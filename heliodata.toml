@@ -1,0 +1,48 @@
+# HelioData Configuration File
+# This is an example configuration file for HelioData downloads
+
+[download]
+# Base directory for all downloads
+ds_path = "/path/to/data"
+
+# Time range settings
+start_year = 2020
+end_year = 2024
+cadence = 24  # hours
+interval = "year"  # "year" or "month"
+
+# Email for JSOC requests (required for SDO data)
+email = "your.email@example.com"
+
+# Logging settings
+log_level = "INFO"  # DEBUG, INFO, WARNING, ERROR
+log_file = "heliodata.log"
+
+# Data validation
+validate_files = true
+compute_checksums = false
+
+# Override default behavior
+ignore_info = false
+
+[sdo_aia]
+# SDO/AIA specific settings
+series = "euv_12s"  # "euv_12s", "uv_24s", "vis_1h"
+segment = "image"   # "image", "spike"
+wavelengths = ["094", "131", "171", "193", "211", "304", "335"]
+
+[soho_eit] 
+# SOHO/EIT specific settings
+wavelengths = ["171", "195", "284", "304"]
+
+[solo_eui]
+# Solar Orbiter/EUI specific settings
+product = ["eui-fsi174-image", "eui-fsi304-image"]
+margin = 1  # hours
+level = 2
+
+[solo_phi]
+# Solar Orbiter/PHI specific settings
+product = ["phi-fdt-ilam", "phi-hrt-ilam"]
+margin = 1
+level = 2
