@@ -1,7 +1,9 @@
 import argparse
 import shutil
+import itertools
 from datetime import datetime
 from pathlib import Path
+from loguru import logger
 
 import pandas as pd
 from sunpy.map import Map
@@ -9,7 +11,10 @@ from sunpy.map import Map
 import drms
 import time
 from tqdm import tqdm
-from urllib.request import urlretrieve
+import time
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from astropy.io import fits
 from sunpy.io._fits import header_to_fits
 from sunpy.util import MetaDict
@@ -28,11 +33,30 @@ def update_header(header, filepath):
         f.verify('silentfix')
 
 
+def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=3):
+    sess = requests.Session()
+    retry = Retry(
+        total=max_retries, backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"])
+    sess.mount("http://", HTTPAdapter(max_retries=retry))
+    sess.mount("https://", HTTPAdapter(max_retries=retry))
+
+    start = time.time()
+    with sess.get(url, stream=True, timeout=(5, 10)) as r:  # (connect=5s, read=10s)
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            for chunk_bytes in r.iter_content(chunk_size=chunk):
+                if chunk_bytes:
+                    f.write(chunk_bytes)
+                if time.time() - start > overall_timeout:
+                    raise TimeoutError("overall timeout exceeded")
+
+
 if __name__ == '__main__':
     #
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--temp', default='D:/temp')
     parser.add_argument('--root', default='F:/data/raw/sdo/aia')
 
     parser.add_argument('--start', default='2011-01-01T00:00:00')
@@ -44,8 +68,10 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    TEMP = Path(args.temp); TEMP.mkdir(exist_ok=True, parents=True)
-    ROOT = Path(args.root)    ; ROOT.mkdir(exist_ok=True, parents=True)
+    ROOT = Path(args.root); ROOT.mkdir(exist_ok=True, parents=True)
+    logger.remove()
+    logger.add(ROOT / 'info.log')
+    logger.info(vars(args))
 
     dt_start = datetime.strptime(args.start, '%Y-%m-%dT%H:%M:%S')
     dt_end   = datetime.strptime(args.end,   '%Y-%m-%dT%H:%M:%S')
@@ -55,58 +81,76 @@ if __name__ == '__main__':
     #
 
     c = drms.Client()
-    
-    for wavelnth in args.wavelengths.split(','):
-        (ROOT / wavelnth).mkdir(exist_ok=True, parents=True)
-        CSV_FILE = ROOT / wavelnth / 'info.csv'
-        
-        if CSV_FILE.exists():
-            df = pd.read_csv(CSV_FILE)
-            if len(df) != len(times):
-                df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
-                df_new = pd.DataFrame(df_times, columns=['obstime'])
-                df_new['filename'] = 'NODATA'
-                only_new = df_new[~df_new['obstime'].isin(df['obstime'])]
-                df = pd.concat([df, only_new], ignore_index=True)
-                df = df.sort_values(by='obstime').reset_index(drop=True)
-                df.to_csv(CSV_FILE, index=False)
-        else:
-            df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
-            df = pd.DataFrame(df_times, columns=['obstime'])
-            df['filename'] = 'NODATA'
+
+    wls = args.wavelengths.split(',')
+    for wl in wls:
+        (ROOT / wl).mkdir(exist_ok=True, parents=True)
+
+    CSV_FILE = ROOT / 'info.csv'
+
+    if CSV_FILE.exists():
+        df = pd.read_csv(CSV_FILE)
+        existing_times = set(df['obstime'])
+        new_times = [
+            t.strftime('%Y-%m-%dT%H:%M:%S') 
+            for t in times 
+            if t.strftime('%Y-%m-%dT%H:%M:%S') not in existing_times
+        ]
+        if new_times:
+            df_new = pd.DataFrame(
+                itertools.product(new_times, wls),
+                columns=['obstime', 'wavelength']
+            )
+            df_new['filepath'] = 'NODATA'
+            df = pd.concat([df, df_new], ignore_index=True)
+            df = df.sort_values(by=['obstime', 'wavelength']).reset_index(drop=True)
             df.to_csv(CSV_FILE, index=False)
+    else:
+        df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
+        df = pd.DataFrame(
+            itertools.product(df_times, wls),
+            columns=['obstime', 'wavelength']
+        )
+        df['filepath'] = 'NODATA'
+        df.to_csv(CSV_FILE, index=False)
 
-        for t in tqdm(times, desc=f'Dowloading {wavelnth}'):
-            t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
-            t_file  = t.strftime('%Y-%m-%dT%H%M%S')
-            df_filename = df[df['obstime'] == t_query]['filename'].iloc[0]
-            if df_filename == 'NODATA':  # there is no file
-                # query to JSOC
-                q = f'aia.lev1_{args.series}[{t_query}][{wavelnth}]' + '{image}'
-                try:
-                    keys = c.keys(q)
-                    header, segment = c.query(q, key=','.join(keys), seg='image')
-                except:
-                    time.sleep(1)
-                    continue
-                if len(header) > 0:
+    for t in tqdm(times, desc=f'Download {args.wavelengths}'):
+        t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
+        t_file  = t.strftime('%Y-%m-%dT%H%M%S')
+        nodata  = (df[df['obstime'] == t_query]['filepath'] == 'NODATA').any()   # Yet to download
+        nodata0 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA0').any()  # Fail to query
+        nodata1 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA1').any()  # Fail to download
+        # nodata2 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA2').any()  # No data found
+        if nodata or nodata0 or nodata1:
+            # query to JSOC
+            q = f'aia.lev1_{args.series}[{t_query}][{args.wavelengths}]' + '{image}'
+            logger.info(q)
+            try:
+                keys = c.keys(q)
+                header, segment = c.query(q, key=','.join(keys), seg='image')
+            except Exception as e:
+                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA0'  # Fail to query
+                logger.error(f"Query failed : NODATA0 : {e}")
+                time.sleep(5)
+                continue
+            if len(header) > 0:
+                for (idx, h), s in zip(header.iterrows(), segment['image']):
+                    h = h.to_dict()
+                    w = str(h['WAVELNTH'])
                     try:
-                        header  = header.iloc[0].to_dict()
-                        segment = segment.iloc[0]['image']
-
                         # download the file
-                        url = 'http://jsoc.stanford.edu' + segment
+                        url = 'http://jsoc.stanford.edu' + s
                         filename = f'aia.{args.series}.{t_file}.fits'
-                        filepath = TEMP / filename
-                        urlretrieve(url, filepath)
-                        update_header(header, filepath)
-                        
-                        # check file & move
-                        smap = Map(filepath)
-                        shutil.move(filepath, ROOT / wavelnth / filename)
-                        
+                        filepath = ROOT / w / filename
+                        download_with_retry(url, filepath)
+                        update_header(h, filepath)
+                    
                         # update CSV
-                        df.loc[df['obstime'] == t_query, 'filename'] = filename
+                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
                         df.to_csv(CSV_FILE, index=False)
-                    except:
-                        pass
+                    except Exception as e:
+                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'  # Fail to download
+                        logger.error(f"Download failed : NODATA1 : {e}")
+            else:
+                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'  # No data found
+                logger.warning(f"No data found : NODATA2 : {t_query}")
