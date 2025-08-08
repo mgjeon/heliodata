@@ -1,12 +1,11 @@
 [project]
 name = "heliodata"
-version = "0.1.1"
-description = "Add your description here"
+version = "0.2.0"
+description = "Heliosphere Data"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "astropy[all]>=6.1.7",
-    "loguru>=0.7.3",
     "sunpy-soar>=1.11.1",
     "sunpy[all]>=6.0.5",
 ]
@@ -14,8 +13,3 @@ dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
-
-[dependency-groups]
-dev = [
-    "ipykernel>=6.29.5",
-]
