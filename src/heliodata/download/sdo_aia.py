@@ -7,7 +7,7 @@ import pandas as pd
 from sunpy.map import Map
 
 import drms
-import numpy as np
+import time
 from tqdm import tqdm
 from urllib.request import urlretrieve
 from astropy.io import fits
@@ -15,16 +15,6 @@ from sunpy.io._fits import header_to_fits
 from sunpy.util import MetaDict
 import warnings; warnings.simplefilter("ignore")
 import logging, sunpy; logging.getLogger('sunpy').setLevel(logging.ERROR)
-
-
-# def download_url(url, filepath):
-#     desc = url.split('/')[-1]
-#     def reporthook(block_num, block_size, total_size):
-#         if pbar.total != total_size:
-#             pbar.total = total_size
-#         pbar.update(block_num * block_size - pbar.n)
-#     with tqdm(unit='B', unit_scale=True, unit_divisor=1024, desc=desc, leave=False) as pbar:
-#         urlretrieve(url, filepath, reporthook=reporthook)
 
 def update_header(header, filepath):
     header['DATE_OBS'] = header['DATE__OBS']
@@ -72,35 +62,51 @@ if __name__ == '__main__':
         
         if CSV_FILE.exists():
             df = pd.read_csv(CSV_FILE)
+            if len(df) != len(times):
+                df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
+                df_new = pd.DataFrame(df_times, columns=['obstime'])
+                df_new['filename'] = 'NODATA'
+                only_new = df_new[~df_new['obstime'].isin(df['obstime'])]
+                df = pd.concat([df, only_new], ignore_index=True)
+                df = df.sort_values(by='obstime').reset_index(drop=True)
+                df.to_csv(CSV_FILE, index=False)
         else:
             df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
             df = pd.DataFrame(df_times, columns=['obstime'])
-            df['filename'] = 'NULL'
+            df['filename'] = 'NODATA'
             df.to_csv(CSV_FILE, index=False)
 
         for t in tqdm(times, desc=f'Dowloading {wavelnth}'):
             t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
             t_file  = t.strftime('%Y-%m-%dT%H%M%S')
             df_filename = df[df['obstime'] == t_query]['filename'].iloc[0]
-            if df_filename == 'NULL':  # there is no file
+            if df_filename == 'NODATA':  # there is no file
                 # query to JSOC
                 q = f'aia.lev1_{args.series}[{t_query}][{wavelnth}]' + '{image}'
-                keys = c.keys(q)
-                header, segment = c.query(q, key=','.join(keys), seg='image')
-                header  = header.iloc[0].to_dict()
-                segment = segment.iloc[0]['image']
+                try:
+                    keys = c.keys(q)
+                    header, segment = c.query(q, key=','.join(keys), seg='image')
+                except:
+                    time.sleep(1)
+                    continue
+                if len(header) > 0:
+                    try:
+                        header  = header.iloc[0].to_dict()
+                        segment = segment.iloc[0]['image']
 
-                # download the file
-                url = 'http://jsoc.stanford.edu' + segment
-                filename = f'aia.{args.series}.{t_file}.fits'
-                filepath = TEMP / filename
-                urlretrieve(url, filepath)
-                update_header(header, filepath)
-                
-                # check file & move
-                smap = Map(filepath)
-                shutil.move(filepath, ROOT / wavelnth / filename)
-
-                # update CSV
-                df.loc[df['obstime'] == t_query, 'filename'] = filename
-                df.to_csv(CSV_FILE, index=False)
+                        # download the file
+                        url = 'http://jsoc.stanford.edu' + segment
+                        filename = f'aia.{args.series}.{t_file}.fits'
+                        filepath = TEMP / filename
+                        urlretrieve(url, filepath)
+                        update_header(header, filepath)
+                        
+                        # check file & move
+                        smap = Map(filepath)
+                        shutil.move(filepath, ROOT / wavelnth / filename)
+                        
+                        # update CSV
+                        df.loc[df['obstime'] == t_query, 'filename'] = filename
+                        df.to_csv(CSV_FILE, index=False)
+                    except:
+                        pass
