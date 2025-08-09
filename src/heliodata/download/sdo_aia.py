@@ -168,20 +168,21 @@ if __name__ == '__main__':
                 for (idx, h), s in zip(header.iterrows(), segment['image']):
                     h = h.to_dict()
                     w = str(h['WAVELNTH'])
-                    try:
-                        # download the file
-                        url = 'http://jsoc.stanford.edu' + s
-                        filename = f'aia.{args.series}.{t_file}.fits'
-                        filepath = ROOT / w / filename
-                        download_with_retry(url, filepath)
-                        update_header(h, filepath)
+                    if 'NODATA' in df[(df['obstime'] == t_query) & (df['wavelength'] == w)]['filepath'].values[0]:
+                        try:
+                            # download the file
+                            url = 'http://jsoc.stanford.edu' + s
+                            filename = f'aia.{args.series}.{t_file}.fits'
+                            filepath = ROOT / w / filename
+                            download_with_retry(url, filepath)
+                            update_header(h, filepath)
 
-                        # update CSV
-                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
-                        df.to_csv(CSV_FILE, index=False)
-                    except Exception as e:
-                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
-                        logger.error(f"NODATA1 : Download failed : {t_query} : {w} : {e}")
+                            # update CSV
+                            df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
+                            df.to_csv(CSV_FILE, index=False)
+                        except Exception as e:
+                            df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
+                            logger.error(f"NODATA1 : Download failed : {t_query} : {w} : {e}")
             else:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                 logger.error(f"NODATA2 : No data found : {t_query} : {args.wavelengths}")
