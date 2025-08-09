@@ -18,8 +18,10 @@ from urllib3.util.retry import Retry
 from astropy.io import fits
 from sunpy.io._fits import header_to_fits
 from sunpy.util import MetaDict
-import warnings; warnings.simplefilter("ignore")
-import logging, sunpy; logging.getLogger('sunpy').setLevel(logging.ERROR)
+import warnings; warnings.filterwarnings("ignore")
+import logging 
+import sunpy; logging.getLogger('sunpy').setLevel(logging.ERROR)
+import urllib3; logging.getLogger("urllib3").setLevel(logging.ERROR)
 
 
 def update_header(header, filepath):
@@ -138,8 +140,8 @@ if __name__ == '__main__':
         t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
         t_file  = t.strftime('%Y-%m-%dT%H%M%S')
         nodata  = (df[df['obstime'] == t_query]['filepath'] == 'NODATA').any()   # Yet to download
-        nodata0 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA0').any()  # Fail to query
-        nodata1 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA1').any()  # Fail to download
+        nodata0 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA0').any()  # Query failed
+        nodata1 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA1').any()  # Download failed
         # nodata2 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA2').any()  # No data found
         if nodata or nodata0 or nodata1:
             # query to JSOC
@@ -149,11 +151,22 @@ if __name__ == '__main__':
                 keys = c.keys(q)
                 header, segment = c.query(q, key=','.join(keys), seg='image')
             except Exception as e:
-                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA0'  # Fail to query
-                logger.error(f"Query failed : NODATA0 : {e}")
+                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA0'
+                logger.error(f"NODATA0 : Query failed : {t_query} : {e}")
                 time.sleep(5)
                 continue
             if len(header) > 0:
+                if len(header) != len(wls):
+                    wls_in_header = []
+                    for idx, h in header.iterrows():
+                        h = h.to_dict()
+                        w = str(h['WAVELNTH'])
+                        wls_in_header.append(w)
+                    wls_not_in_header = [wl for wl in wls if wl not in wls_in_header]
+                    for w in wls_not_in_header:
+                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA2'
+                        logger.error(f"NODATA2 : No data found : {t_query} : {w}")
+
                 for (idx, h), s in zip(header.iterrows(), segment['image']):
                     h = h.to_dict()
                     w = str(h['WAVELNTH'])
@@ -169,8 +182,8 @@ if __name__ == '__main__':
                         df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
                         df.to_csv(CSV_FILE, index=False)
                     except Exception as e:
-                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'  # Fail to download
-                        logger.error(f"Download failed : NODATA1 : {e}")
+                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
+                        logger.error(f"NODATA1 : Download failed : {t_query} : {e}")
             else:
-                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'  # No data found
-                logger.warning(f"No data found : NODATA2 : {t_query}")
+                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
+                logger.error(f"NODATA2 : No data found : {t_query} : {args.wavelengths}")
