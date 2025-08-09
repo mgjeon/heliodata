@@ -6,8 +6,9 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "astropy[all]>=6.1.7",
-    "sunpy-soar>=1.11.1",
     "sunpy[all]>=6.0.5",
+    "sunpy-soar>=1.11.1",
+    "loguru>=0.7.3",
 ]
 
 [build-system]
