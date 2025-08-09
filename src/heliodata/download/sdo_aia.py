@@ -53,6 +53,26 @@ def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=
                     raise TimeoutError("overall timeout exceeded")
 
 
+def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=3):
+    sess = requests.Session()
+    retry = Retry(
+        total=max_retries, backoff_factor=1,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["GET"])
+    sess.mount("http://", HTTPAdapter(max_retries=retry))
+    sess.mount("https://", HTTPAdapter(max_retries=retry))
+
+    start = time.time()
+    with sess.get(url, stream=True, timeout=(5, 10)) as r:  # (connect=5s, read=10s)
+        r.raise_for_status()
+        with open(path, "wb") as f:
+            for chunk_bytes in r.iter_content(chunk_size=chunk):
+                if chunk_bytes:
+                    f.write(chunk_bytes)
+                if time.time() - start > overall_timeout:
+                    raise TimeoutError("overall timeout exceeded")
+
+
 if __name__ == '__main__':
     #
     parser = argparse.ArgumentParser()
