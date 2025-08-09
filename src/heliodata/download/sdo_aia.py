@@ -40,37 +40,24 @@ def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=
     retry = Retry(
         total=max_retries, backoff_factor=1,
         status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"])
+        allowed_methods=["GET"]
+    )
     sess.mount("http://", HTTPAdapter(max_retries=retry))
     sess.mount("https://", HTTPAdapter(max_retries=retry))
 
     start = time.time()
     with sess.get(url, stream=True, timeout=(5, 10)) as r:  # (connect=5s, read=10s)
         r.raise_for_status()
-        with open(path, "wb") as f:
+        total_size = int(r.headers.get("Content-Length", 0))
+        with open(path, "wb") as f, tqdm(
+            total=total_size, unit="B", unit_scale=True, unit_divisor=1024,
+            desc=str(path),
+            leave=False
+        ) as pbar:
             for chunk_bytes in r.iter_content(chunk_size=chunk):
                 if chunk_bytes:
                     f.write(chunk_bytes)
-                if time.time() - start > overall_timeout:
-                    raise TimeoutError("overall timeout exceeded")
-
-
-def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=3):
-    sess = requests.Session()
-    retry = Retry(
-        total=max_retries, backoff_factor=1,
-        status_forcelist=[429, 500, 502, 503, 504],
-        allowed_methods=["GET"])
-    sess.mount("http://", HTTPAdapter(max_retries=retry))
-    sess.mount("https://", HTTPAdapter(max_retries=retry))
-
-    start = time.time()
-    with sess.get(url, stream=True, timeout=(5, 10)) as r:  # (connect=5s, read=10s)
-        r.raise_for_status()
-        with open(path, "wb") as f:
-            for chunk_bytes in r.iter_content(chunk_size=chunk):
-                if chunk_bytes:
-                    f.write(chunk_bytes)
+                    pbar.update(len(chunk_bytes))
                 if time.time() - start > overall_timeout:
                     raise TimeoutError("overall timeout exceeded")
 
@@ -111,7 +98,7 @@ if __name__ == '__main__':
     CSV_FILE = ROOT / 'info.csv'
 
     if CSV_FILE.exists():
-        df = pd.read_csv(CSV_FILE)
+        df = pd.read_csv(CSV_FILE, dtype=str)
         existing_times = set(df['obstime'])
         new_times = [
             t.strftime('%Y-%m-%dT%H:%M:%S') 
@@ -177,13 +164,13 @@ if __name__ == '__main__':
                         filepath = ROOT / w / filename
                         download_with_retry(url, filepath)
                         update_header(h, filepath)
-                    
+
                         # update CSV
                         df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
                         df.to_csv(CSV_FILE, index=False)
                     except Exception as e:
                         df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
-                        logger.error(f"NODATA1 : Download failed : {t_query} : {e}")
+                        logger.error(f"NODATA1 : Download failed : {t_query} : {w} : {e}")
             else:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                 logger.error(f"NODATA2 : No data found : {t_query} : {args.wavelengths}")
