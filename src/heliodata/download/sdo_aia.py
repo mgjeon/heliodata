@@ -114,6 +114,17 @@ if __name__ == '__main__':
             df = pd.concat([df, df_new], ignore_index=True)
             df = df.sort_values(by=['obstime', 'wavelength']).reset_index(drop=True)
             df.to_csv(CSV_FILE, index=False)
+        existing_wls = set(df['wavelength'])
+        new_wls = set(wls) - existing_wls
+        if new_wls:
+            df_new = pd.DataFrame(
+                itertools.product(set(df['obstime']), new_wls),
+                columns=['obstime', 'wavelength']
+            )
+            df_new['filepath'] = 'NODATA'
+            df = pd.concat([df, df_new], ignore_index=True)
+            df = df.sort_values(by=['obstime', 'wavelength']).reset_index(drop=True)
+            df.to_csv(CSV_FILE, index=False)
     else:
         df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
         df = pd.DataFrame(
