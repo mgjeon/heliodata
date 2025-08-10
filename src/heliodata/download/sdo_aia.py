@@ -6,8 +6,6 @@ from pathlib import Path
 from loguru import logger
 
 import pandas as pd
-from sunpy.map import Map
-
 import drms
 import time
 from tqdm import tqdm
@@ -63,7 +61,6 @@ def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=
 
 
 if __name__ == '__main__':
-    #
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--root', default='F:/data/raw/sdo/aia')
@@ -88,8 +85,6 @@ if __name__ == '__main__':
     for t in pd.date_range(dt_start, dt_end, freq=args.cadence, inclusive='left'):
         times.append(t)
     #
-
-    c = drms.Client()
 
     wls = args.wavelengths.split(',')
     for wl in wls:
@@ -139,7 +134,9 @@ if __name__ == '__main__':
         )
         df['filepath'] = 'NODATA'
         df.to_csv(CSV_FILE, index=False)
+    #
 
+    c = drms.Client()
     for t in tqdm(times, desc=f'Download {args.wavelengths}'):
         t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
         t_file  = t.strftime('%Y-%m-%dT%H%M%S')
@@ -156,6 +153,7 @@ if __name__ == '__main__':
                 header, segment = c.query(q, key=','.join(keys), seg='image')
             except Exception as e:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA0'
+                df.to_csv(CSV_FILE, index=False)
                 logger.error(f"NODATA0 : Query failed : {t_query} : {e}")
                 time.sleep(5)
                 continue
@@ -169,6 +167,7 @@ if __name__ == '__main__':
                     wls_not_in_header = [wl for wl in wls if wl not in wls_in_header]
                     for w in wls_not_in_header:
                         df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA2'
+                        df.to_csv(CSV_FILE, index=False)
                         logger.error(f"NODATA2 : No data found : {t_query} : {w}")
 
                 for (idx, h), s in zip(header.iterrows(), segment['image']):
@@ -178,7 +177,7 @@ if __name__ == '__main__':
                         try:
                             # download the file
                             url = 'http://jsoc.stanford.edu' + s
-                            filename = f'aia.{args.series}.{t_file}.fits'
+                            filename = f'{t_file}.fits'
                             filepath = ROOT / w / filename
                             download_with_retry(url, filepath)
                             update_header(h, filepath)
@@ -188,7 +187,9 @@ if __name__ == '__main__':
                             df.to_csv(CSV_FILE, index=False)
                         except Exception as e:
                             df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
+                            df.to_csv(CSV_FILE, index=False)
                             logger.error(f"NODATA1 : Download failed : {t_query} : {w} : {e}")
             else:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
+                df.to_csv(CSV_FILE, index=False)
                 logger.error(f"NODATA2 : No data found : {t_query} : {args.wavelengths}")
