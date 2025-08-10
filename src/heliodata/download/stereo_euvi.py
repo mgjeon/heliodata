@@ -12,11 +12,27 @@ from sunpy.net import Fido, attrs as a
 from tqdm import tqdm
 import warnings; warnings.filterwarnings("ignore")
 import logging
-import sunpy
+from parfive import Downloader
 logging.getLogger('sunpy').setLevel(logging.ERROR)
-logging.getLogger("parfive").setLevel(logging.ERROR)
-logging.getLogger("zeep").setLevel(logging.ERROR)
+logging.getLogger('parfive').setLevel(logging.ERROR)
+logging.getLogger('zeep').setLevel(logging.ERROR)
+import contextlib
+class DownloaderLeaveFalse(Downloader):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
+    def _get_main_pb(self, total):
+        if self.config.progress:
+            return self.tqdm(
+                total=total,
+                unit="file",
+                desc="Files Downloaded",
+                position=1,
+                leave=False   # 여기 추가
+            )
+        return contextlib.contextmanager(lambda: iter([None]))()
+
+dl = DownloaderLeaveFalse(progress=True, overwrite=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
@@ -88,7 +104,7 @@ if __name__ == '__main__':
     # 
 
     t_margin = pd.Timedelta(minutes=args.margin)
-    for t in tqdm(times, desc=f'Download {args.wavelengths}'):
+    for t in tqdm(times, desc=f'Download {args.wavelengths}', position=0, leave=True):
 
         t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
         t_file  = t.strftime('%Y-%m-%dT%H%M%S')
@@ -123,7 +139,7 @@ if __name__ == '__main__':
                         search_times = pd.to_datetime(search['vso']['Start Time'].datetime)
                         diff_times = list(abs(search_times - t).total_seconds())
                         closest_search = search['vso'][np.argmin(diff_times)]
-                        files = Fido.fetch(closest_search, path=ROOT / s2p[s] / w, overwrite=False, progress=False)
+                        files = Fido.fetch(closest_search, path=ROOT / s2p[s] / w, downloader=dl)
                         if len(files) == 1:
                             file = files[0]
                             filename = f'{t_file}.fits'
