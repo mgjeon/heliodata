@@ -98,6 +98,12 @@ if __name__ == '__main__':
     CSV_FILE = ROOT / 'info.csv'
 
     if CSV_FILE.exists():
+        # backup 
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        backup_file = CSV_FILE.with_name(f'info_{timestamp}.csv')
+        shutil.copy2(CSV_FILE, backup_file)
+        logger.info(f"Backup created: {backup_file}")
+
         df = pd.read_csv(CSV_FILE, dtype=str)
         existing_times = set(df['obstime'])
         new_times = [
