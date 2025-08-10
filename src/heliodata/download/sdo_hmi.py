@@ -63,14 +63,14 @@ def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--root', default='F:/data/raw/sdo/aia')
+    parser.add_argument('--root', default='F:/data/raw/sdo/hmi')
 
     parser.add_argument('--start', default='2011-01-01T00:00:00')
     parser.add_argument('--end',   default='2025-01-01T00:00:00')  # exclusive
     parser.add_argument('--cadence',  default='24h')
 
-    parser.add_argument('--series', default='euv_12s')
-    parser.add_argument('--wavelengths', default='94,131,171,193,211,304,335')
+    parser.add_argument('--series', default='M_720s')
+    parser.add_argument('--segments', default='**ALL**')
 
     args = parser.parse_args()
 
@@ -86,12 +86,19 @@ if __name__ == '__main__':
         times.append(t)
     #
 
-    wls = args.wavelengths.split(',')
-    for wl in wls:
-        (ROOT / wl).mkdir(exist_ok=True, parents=True)
+    (ROOT / args.series).mkdir(exist_ok=True, parents=True)
+
+    c = drms.Client()
+    t_query = times[0].strftime('%Y-%m-%dT%H:%M:%S')
+    q = f'hmi.{args.series}[{t_query}]' + '{' + f'{args.segments}' + '}'
+    keys = c.keys(q)
+    header, segment = c.query(q, key=','.join(keys), seg='**ALL**')
+
+    segments = segment.T.index
+    for seg in segments:
+        (ROOT / args.series / seg).mkdir(exist_ok=True, parents=True)
 
     CSV_FILE = ROOT / 'info.csv'
-
     if CSV_FILE.exists():
         # backup 
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -105,26 +112,26 @@ if __name__ == '__main__':
 
         df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
         df_new = pd.DataFrame(
-            itertools.product(df_times, wls),
-            columns=['obstime', 'wavelength']
+            itertools.product(df_times, [args.series], segments),
+            columns=['obstime', 'series', 'segment']
         )
         df_new['filepath'] = 'NODATA'
         df = pd.concat([df_old, df_new], ignore_index=True)
-        df = df.drop_duplicates(subset=['obstime', 'wavelength'], keep='first')
-        df = df.sort_values(by=['obstime', 'wavelength']).reset_index(drop=True)
+        df = df.drop_duplicates(subset=['obstime', 'series', 'segment'], keep='first')
+        df = df.sort_values(by=['obstime', 'series', 'segment']).reset_index(drop=True)
         df.to_csv(CSV_FILE, index=False)
     else:
         df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
         df = pd.DataFrame(
-            itertools.product(df_times, wls),
-            columns=['obstime', 'wavelength']
+            itertools.product(df_times, [args.series], segments),
+            columns=['obstime', 'series', 'segment']
         )
         df['filepath'] = 'NODATA'
         df.to_csv(CSV_FILE, index=False)
     #
 
     c = drms.Client()
-    for t in tqdm(times, desc=f'Download {args.wavelengths}'):
+    for t in tqdm(times, desc=f'Download {args.segments}'):
         t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
         t_file  = t.strftime('%Y-%m-%dT%H%M%S')
         nodata  = (df[df['obstime'] == t_query]['filepath'] == 'NODATA').any()   # Yet to download
@@ -133,11 +140,11 @@ if __name__ == '__main__':
         # nodata2 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA2').any()  # No data found
         if nodata or nodata0 or nodata1:
             # query to JSOC
-            q = f'aia.lev1_{args.series}[{t_query}][{args.wavelengths}]' + '{image}'
+            q = f'hmi.{args.series}[{t_query}]' + '{' + f'{args.segments}' + '}'
             logger.info(q)
             try:
                 keys = c.keys(q)
-                header, segment = c.query(q, key=','.join(keys), seg='image')
+                header, segm = c.query(q, key=','.join(keys), seg=segments)
             except Exception as e:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA0'
                 df.to_csv(CSV_FILE, index=False)
@@ -145,38 +152,25 @@ if __name__ == '__main__':
                 time.sleep(5)
                 continue
             if len(header) > 0:
-                if len(header) != len(wls):
-                    wls_in_header = []
-                    for idx, h in header.iterrows():
-                        h = h.to_dict()
-                        w = str(h['WAVELNTH'])
-                        wls_in_header.append(w)
-                    wls_not_in_header = [wl for wl in wls if wl not in wls_in_header]
-                    for w in wls_not_in_header:
-                        df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA2'
-                        df.to_csv(CSV_FILE, index=False)
-                        logger.error(f"NODATA2 : No data found : {t_query} : {w}")
-
-                for (idx, h), s in zip(header.iterrows(), segment['image']):
-                    h = h.to_dict()
-                    w = str(h['WAVELNTH'])
-                    if 'NODATA' in df[(df['obstime'] == t_query) & (df['wavelength'] == w)]['filepath'].values[0]:
+                h = header.iloc[0].to_dict()
+                for seg in segments:
+                    if 'NODATA' in df[(df['obstime'] == t_query) & (df['segment'] == seg)]['filepath'].values[0]:
                         try:
                             # download the file
-                            url = 'http://jsoc.stanford.edu' + s
+                            url = 'http://jsoc.stanford.edu' + segm[seg].iloc[0]
                             filename = f'{t_file}.fits'
-                            filepath = ROOT / w / filename
+                            filepath = ROOT / args.series / seg / filename
                             download_with_retry(url, filepath)
                             update_header(h, filepath)
 
                             # update CSV
-                            df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = f'{w}/{filename}'
+                            df.loc[(df['obstime'] == t_query) & (df['segment'] == seg), 'filepath'] = f'{args.series}/{seg}/{filename}'
                             df.to_csv(CSV_FILE, index=False)
                         except Exception as e:
-                            df.loc[(df['obstime'] == t_query) & (df['wavelength'] == w), 'filepath'] = 'NODATA1'
+                            df.loc[(df['obstime'] == t_query) & (df['segment'] == seg), 'filepath'] = 'NODATA1'
                             df.to_csv(CSV_FILE, index=False)
-                            logger.error(f"NODATA1 : Download failed : {t_query} : {w} : {e}")
+                            logger.error(f"NODATA1 : Download failed : {t_query} : {seg} : {e}")
             else:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                 df.to_csv(CSV_FILE, index=False)
-                logger.error(f"NODATA2 : No data found : {t_query} : {args.wavelengths}")
+                logger.error(f"NODATA2 : No data found : {t_query} : {args.segments}")

@@ -12,7 +12,10 @@ from sunpy.net import Fido, attrs as a
 from tqdm import tqdm
 import warnings; warnings.filterwarnings("ignore")
 import logging
-import sunpy; logging.getLogger('sunpy').setLevel(logging.ERROR)
+import sunpy
+logging.getLogger('sunpy').setLevel(logging.ERROR)
+logging.getLogger("parfive").setLevel(logging.ERROR)
+logging.getLogger("zeep").setLevel(logging.ERROR)
 
 
 if __name__ == '__main__':
@@ -60,33 +63,20 @@ if __name__ == '__main__':
         backup_file = CSV_FILE.with_name(f'info_{timestamp}.csv')
         shutil.copy2(CSV_FILE, backup_file)
 
-        df = pd.read_csv(CSV_FILE, dtype=str)
-        existing_times = set(df['obstime'])
-        new_times = [
-            t.strftime('%Y-%m-%dT%H:%M:%S') 
-            for t in times 
-            if t.strftime('%Y-%m-%dT%H:%M:%S') not in existing_times
-        ]
-        if new_times:
-            df_new = pd.DataFrame(
-                itertools.product(new_times, stereo, wls),
-                columns=['obstime', 'stereo', 'wavelength']
-            )
-            df_new['filepath'] = 'NODATA'
-            df = pd.concat([df, df_new], ignore_index=True)
-            df = df.sort_values(by=['obstime', 'stereo', 'wavelength']).reset_index(drop=True)
-            df.to_csv(CSV_FILE, index=False)
-        existing_wls = set(df['wavelength'])
-        new_wls = set(wls) - existing_wls
-        if new_wls:
-            df_new = pd.DataFrame(
-                itertools.product(set(df['obstime']), stereo, new_wls),
-                columns=['obstime', 'stereo', 'wavelength']
-            )
-            df_new['filepath'] = 'NODATA'
-            df = pd.concat([df, df_new], ignore_index=True)
-            df = df.sort_values(by=['obstime', 'stereo', 'wavelength']).reset_index(drop=True)
-            df.to_csv(CSV_FILE, index=False)
+        # load
+        df_old = pd.read_csv(CSV_FILE, dtype=str)
+        df_old = df_old[df_old['filepath'] != 'NODATA']
+
+        df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
+        df_new = pd.DataFrame(
+            itertools.product(df_times, stereo, wls),
+            columns=['obstime', 'stereo', 'wavelength']
+        )
+        df_new['filepath'] = 'NODATA'
+        df = pd.concat([df_old, df_new], ignore_index=True)
+        df = df.drop_duplicates(subset=['obstime', 'stereo', 'wavelength'], keep='first')
+        df = df.sort_values(by=['obstime', 'stereo', 'wavelength']).reset_index(drop=True)
+        df.to_csv(CSV_FILE, index=False)
     else:
         df_times = [t.strftime('%Y-%m-%dT%H:%M:%S') for t in times]
         df = pd.DataFrame(
@@ -98,14 +88,16 @@ if __name__ == '__main__':
     # 
 
     t_margin = pd.Timedelta(minutes=args.margin)
-    for s in stereo:
-        for t in tqdm(times, desc=f'Download {args.wavelengths}'):
-            t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
-            t_file  = t.strftime('%Y-%m-%dT%H%M%S')
+    for t in tqdm(times, desc=f'Download {args.wavelengths}'):
 
+        t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
+        t_file  = t.strftime('%Y-%m-%dT%H%M%S')
+
+        for s in stereo:
             if s == 'STEREO_B' and t > pd.Timestamp('2014-10-01'):
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                 df.to_csv(CSV_FILE, index=False)
+                continue
 
             nodata  = (df[df['obstime'] == t_query]['filepath'] == 'NODATA').any()   # Yet to download
             nodata0 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA0').any()  # Query failed
@@ -132,19 +124,20 @@ if __name__ == '__main__':
                         diff_times = list(abs(search_times - t).total_seconds())
                         closest_search = search['vso'][np.argmin(diff_times)]
                         files = Fido.fetch(closest_search, path=ROOT / s2p[s] / w, overwrite=False, progress=False)
+                        if len(files) == 1:
+                            file = files[0]
+                            filename = f'{t_file}.fits'
+                            filepath = ROOT / s2p[s] / w / filename
+                            shutil.move(file, filepath)
+                            df.loc[(df['obstime'] == t_query) & (df['stereo'] == s) & (df['wavelength'] == w), 'filepath'] = f'{s2p[s]}/{w}/{filename}'
+                            df.to_csv(CSV_FILE, index=False)
+                        else:
+                            df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA1'
+                            df.to_csv(CSV_FILE, index=False)
+                            logger.error(f"NODATA1 : Multiple files found ({len(files)}) : {t_query} : {w}")
                     else:
                         df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                         df.to_csv(CSV_FILE, index=False)
                         logger.error(f"NODATA2 : No data found : {t_query} : {w}")
 
-                    if len(files) == 1:
-                        file = files[0]
-                        filename = f'{t_file}.fits'
-                        filepath = ROOT / s2p[s] / w / filename
-                        shutil.move(file, filepath)
-                        df.loc[(df['obstime'] == t_query) & (df['stereo'] == s) & (df['wavelength'] == w), 'filepath'] = f'{s2p[s]}/{w}/{filename}'
-                        df.to_csv(CSV_FILE, index=False)
-                    else:
-                        df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA1'
-                        df.to_csv(CSV_FILE, index=False)
-                        logger.error(f"NODATA1 : Multiple files found ({len(files)}) : {t_query} : {w}")
+                    
