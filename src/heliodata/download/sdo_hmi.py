@@ -62,16 +62,13 @@ def download_with_retry(url, path, overall_timeout=30, chunk=1<<20, max_retries=
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--root', default='F:/data/raw/sdo/hmi')
-
     parser.add_argument('--start', default='2011-01-01T00:00:00')
     parser.add_argument('--end',   default='2025-01-01T00:00:00')  # exclusive
     parser.add_argument('--cadence',  default='24h')
-
     parser.add_argument('--series', default='M_720s')
     parser.add_argument('--segments', default='**ALL**')
-
+    parser.add_argument('--skip', default='NODATA2')
     args = parser.parse_args()
 
     ROOT = Path(args.root); ROOT.mkdir(exist_ok=True, parents=True)
@@ -130,6 +127,8 @@ if __name__ == '__main__':
         df.to_csv(CSV_FILE, index=False)
     #
 
+    skips = args.skip.split(',')
+
     c = drms.Client()
     for t in tqdm(times, desc=f'Download {args.segments}'):
         t_query = t.strftime('%Y-%m-%dT%H:%M:%S')
@@ -137,8 +136,19 @@ if __name__ == '__main__':
         nodata  = (df[df['obstime'] == t_query]['filepath'] == 'NODATA').any()   # Yet to download
         nodata0 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA0').any()  # Query failed
         nodata1 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA1').any()  # Download failed
-        # nodata2 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA2').any()  # No data found
-        if nodata or nodata0 or nodata1:
+        nodata2 = (df[df['obstime'] == t_query]['filepath'] == 'NODATA2').any()  # No data found
+
+        ischeck = False
+        if nodata:
+            ischeck = True
+        if nodata0:
+            ischeck = True
+        if nodata1 and 'NODATA1' not in skips:
+            ischeck = True
+        if nodata2 and 'NODATA2' not in skips:
+            ischeck = True
+
+        if ischeck:
             # query to JSOC
             q = f'hmi.{args.series}[{t_query}]' + '{' + f'{args.segments}' + '}'
             logger.info(q)
@@ -170,7 +180,9 @@ if __name__ == '__main__':
                             df.loc[(df['obstime'] == t_query) & (df['segment'] == seg), 'filepath'] = 'NODATA1'
                             df.to_csv(CSV_FILE, index=False)
                             logger.error(f"NODATA1 : Download failed : {t_query} : {seg} : {e}")
+                            continue
             else:
                 df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                 df.to_csv(CSV_FILE, index=False)
                 logger.error(f"NODATA2 : No data found : {t_query} : {args.segments}")
+                continue

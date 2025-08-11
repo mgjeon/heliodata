@@ -36,17 +36,13 @@ dl = DownloaderLeaveFalse(progress=True, overwrite=False)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
     parser.add_argument('--root', default='F:/data/raw/stereo/euvi')
-
     parser.add_argument('--start', default='2011-01-01T00:00:00')
     parser.add_argument('--end',   default='2025-01-01T00:00:00')  # exclusive
     parser.add_argument('--cadence',  default='24h')
-
     parser.add_argument('--margin', default=15)  # minutes
     parser.add_argument('--stereo', default='STEREO_A,STEREO_B')
     parser.add_argument('--wavelengths', default='171,195,284,304')
-
     args = parser.parse_args()
 
     ROOT = Path(args.root); ROOT.mkdir(exist_ok=True, parents=True)
@@ -139,21 +135,28 @@ if __name__ == '__main__':
                         search_times = pd.to_datetime(search['vso']['Start Time'].datetime)
                         diff_times = list(abs(search_times - t).total_seconds())
                         closest_search = search['vso'][np.argmin(diff_times)]
-                        files = Fido.fetch(closest_search, path=ROOT / s2p[s] / w, downloader=dl)
-                        if len(files) == 1:
-                            file = files[0]
-                            filename = f'{t_file}.fits'
-                            filepath = ROOT / s2p[s] / w / filename
-                            shutil.move(file, filepath)
-                            df.loc[(df['obstime'] == t_query) & (df['stereo'] == s) & (df['wavelength'] == w), 'filepath'] = f'{s2p[s]}/{w}/{filename}'
-                            df.to_csv(CSV_FILE, index=False)
-                        else:
+                        try:
+                            files = Fido.fetch(closest_search, path=ROOT / s2p[s] / w, downloader=dl)
+                            if len(files) == 1:
+                                file = files[0]
+                                filename = f'{t_file}.fits'
+                                filepath = ROOT / s2p[s] / w / filename
+                                shutil.move(file, filepath)
+                                df.loc[(df['obstime'] == t_query) & (df['stereo'] == s) & (df['wavelength'] == w), 'filepath'] = f'{s2p[s]}/{w}/{filename}'
+                                df.to_csv(CSV_FILE, index=False)
+                            else:
+                                df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA1'
+                                df.to_csv(CSV_FILE, index=False)
+                                logger.error(f"NODATA1 : Files found ({len(files)}) : {t_query} : {w}")
+                                continue
+                        except Exception as e:
                             df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA1'
                             df.to_csv(CSV_FILE, index=False)
-                            logger.error(f"NODATA1 : Multiple files found ({len(files)}) : {t_query} : {w}")
+                            logger.error(f"NODATA1 : Error occurred : {t_query} : {w} : {e}")
+                            continue
                     else:
                         df.loc[df['obstime'] == t_query, 'filepath'] = 'NODATA2'
                         df.to_csv(CSV_FILE, index=False)
                         logger.error(f"NODATA2 : No data found : {t_query} : {w}")
-
+                        continue
                     
